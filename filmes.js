@@ -29,7 +29,7 @@ async function buscarFilmesAleatorios() {
   return dados.results;
 }
 
-// Função para processar filmes (substituir IDs de gêneros e buscar diretores)
+// Função para processar filmes (gêneros, atores e diretores)
 async function processarFilmes(filmes) {
   const filmesProcessados = [];
   const generos = JSON.parse(fs.readFileSync("generos.json", "utf-8"));
@@ -39,6 +39,7 @@ async function processarFilmes(filmes) {
 
     filme.generos = filme.genre_ids.map((id) => generos[id] || id);
     filme.diretor = detalhes.credits.crew.find((pessoa) => pessoa.job === "Director")?.name || "Desconhecido";
+    filme.elenco = detalhes.credits.cast.map((pessoa) => pessoa.name).slice(0, 5);
 
     filmesProcessados.push(filme);
   }
@@ -70,6 +71,7 @@ function carregarPredicadosProlog() {
       filme: [],
       genero_filme: [],
       diretor_filme: [],
+      ator_filme: [],
       ano_filme: [],
       avaliacao_filme: []
     };
@@ -78,6 +80,7 @@ function carregarPredicadosProlog() {
       if (linha.startsWith("filme(")) predicados.filme.push(linha);
       else if (linha.startsWith("genero_filme(")) predicados.genero_filme.push(linha);
       else if (linha.startsWith("diretor_filme(")) predicados.diretor_filme.push(linha);
+      else if (linha.startsWith("ator_filme(")) predicados.ator_filme.push(linha);
       else if (linha.startsWith("ano_filme(")) predicados.ano_filme.push(linha);
       else if (linha.startsWith("avaliacao_filme(")) predicados.avaliacao_filme.push(linha);
     });
@@ -104,17 +107,22 @@ function escreverProlog() {
     if (novosFilmes.length === 0) return;
 
     novosFilmes.forEach((filme) => {
-      const titulo = filme.title.replace(/"/g, '\\"');
-      const sinopse = filme.overview.replace(/"/g, '\\"');
+      const titulo = filme.title.replace(/"/g, '');
+      const sinopse = filme.overview.replace(/"/g, '');
       const anoFilme = new Date(filme.release_date).getFullYear();
       const generos = filme.generos.map((genero) => `'${genero}'`).join(", ");
+      const atores = filme.elenco.map((ator) => `"${ator}"`).join(", ");
 
       predicados.filme.push(
-        `filme(${filme.id}, "${titulo}", "${sinopse}", ${anoFilme}, "${filme.diretor}", [${generos}], ${filme.vote_average}).`
+        `filme(${filme.id}, "${titulo}", "${sinopse}", ${anoFilme}, "${filme.diretor}", [${atores}], [${generos}], ${filme.vote_average}).`
       );
 
       filme.generos.forEach((genero) => {
         predicados.genero_filme.push(`genero_filme(${filme.id}, '${genero}').`);
+      });
+
+      filme.elenco.forEach((ator) => {
+        predicados.ator_filme.push(`ator_filme(${filme.id}, '${ator.replace(/'/g, '')}').`);
       });
 
       predicados.diretor_filme.push(`diretor_filme(${filme.id}, '${filme.diretor}').`);
@@ -126,6 +134,8 @@ function escreverProlog() {
       ...predicados.filme,
       "",
       ...predicados.genero_filme,
+      "",
+      ...predicados.ator_filme,
       "",
       ...predicados.diretor_filme,
       "",
